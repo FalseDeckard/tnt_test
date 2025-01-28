@@ -53,4 +53,4 @@ elasticsearch-data/
 # Model files
 *.pkl
 *.h5
-*.model
+*.model.DS_Store
