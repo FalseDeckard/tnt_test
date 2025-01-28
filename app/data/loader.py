@@ -12,7 +12,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 import nltk
 
-nltk.download('punkt')
+nltk.download('punkt_tab')
 nltk.download('stopwords')
 
 class TextPreprocessor:

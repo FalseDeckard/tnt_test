@@ -37,7 +37,7 @@ class HybridSearch:
         self.vector_search = vector_search
         
         # Инициализация весов с проверкой нормализации
-        self.weights = weights or {"bm25": 0.5, "vector": 0.5}
+        self.weights = weights or {"bm25": 0.6, "vector": 0.4}
         self._validate_weights()  # Проверка и корректировка весов
         
         self.logger.info(f"Гибридный поиск инициализирован с весами: {self.weights}")
@@ -57,7 +57,7 @@ class HybridSearch:
                 self.weights[key] /= total
             self.logger.info(f"Нормализованные веса: {self.weights}")
 
-    def set_weights(self, weights: Dict[str, float]):
+    def set_weights(self, weights):
         """
         Обновление весов для методов поиска с автоматической нормализацией.
         
@@ -68,7 +68,7 @@ class HybridSearch:
         self.weights = weights
         self._validate_weights()  # Повторная проверка после обновления
 
-    def batch_search(self, queries: List[str], top_k: int = 5) -> List[List[Dict]]:
+    def batch_search(self, queries, top_k = 5):
         """
         Пакетная обработка нескольких поисковых запросов.
         
@@ -89,7 +89,7 @@ class HybridSearch:
             self.logger.error(f"Ошибка пакетной обработки: {str(e)}")
             return [[] for _ in queries]
 
-    def search(self, query: str, top_k: int = 5) -> List[Dict]:
+    def search(self, query, top_k = 5):
         """
         Основной метод гибридного поиска для одного запроса.
         
@@ -129,10 +129,10 @@ class HybridSearch:
 
     def _combine_results(
         self,
-        bm25_results: List[Dict],
-        vector_results: List[Dict],
+        bm25_results,
+        vector_results,
         top_k: int
-    ) -> List[Dict]:
+    ):
         """
         Внутренний метод для объединения и ранжирования результатов.
         
