@@ -1,33 +1,61 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+from app.api.endpoints import router, search_manager
+import logging
+from contextlib import asynccontextmanager
+import uvicorn
 
-# Создание экземпляра FastAPI приложения
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Base directory and HTML content
+BASE_DIR = Path(__file__).resolve().parent
+
+# Read HTML content at module level
+try:
+    with open(BASE_DIR / "templates" / "search.html", 'r', encoding='utf-8') as f:
+        HTML_CONTENT = f.read()
+except FileNotFoundError:
+    HTML_CONTENT = """
+    <html>
+        <body>
+            <h1>Template file not found</h1>
+        </body>
+    </html>
+    """
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events"""
+    logger.info("Starting up the application...")
+    try:
+        # Инициализируем поисковые движки при старте
+        await search_manager.initialize()
+        logger.info("Search engines initialized successfully")
+        yield
+    finally:
+        logger.info("Shutting down the application...")
+        search_manager.cleanup()
+        logger.info("Cleanup completed")
+
+# Создаем приложение
 app = FastAPI(
-    title="Document Search Engine",
-    description="Поисковый движок для русскоязычных документов",
-    version="0.1.0"
+    title="Search API",
+    description="API for performing vector, text, and hybrid search",
+    version="1.0.0",
+    lifespan=lifespan  # Важно: добавляем lifespan
 )
 
-# Настройка CORS - позволяет делать запросы с других доменов
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],      # Разрешаем запросы с любых доменов
-    allow_credentials=True,   # Разрешаем передачу credentials
-    allow_methods=["*"],      # Разрешаем все HTTP методы
-    allow_headers=["*"],      # Разрешаем все заголовки
-)
+# Include API routes
+app.include_router(router, prefix="/api")
 
-# Подключаем роутер с префиксом /api/v1
-# Теперь все маршруты из routes.py будут доступны по /api/v1/...
-app.include_router(router, prefix="/api/v1")
+# Add route for the web interface
+@app.get("/", response_class=HTMLResponse)
+async def get_search_page():
+    return HTML_CONTENT
 
-# Корневой маршрут для проверки работы API
-@app.get("/")
-async def root():
-    return {"message": "Document Search Engine API"}
-
-# Запуск приложения при непосредственном выполнении файла
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)

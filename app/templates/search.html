@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold mb-6 text-center">Поисковый интерфейс</h1>
+        
+        <form id="searchForm" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Метод поиска</label>
+                <select id="method" class="w-full px-3 py-2 border border-gray-300 rounded-md" onchange="toggleWeights()">
+                    <option value="hybrid">Гибридный поиск</option>
+                    <option value="vector">Векторный поиск</option>
+                    <option value="text">Текстовый поиск</option>
+                </select>
+            </div>
+            
+            <div id="weightsSection" class="space-y-2 hidden">
+                <label class="block text-sm font-medium text-gray-700">Веса для гибридного поиска</label>
+                <div class="flex gap-4">
+                    <div class="flex-1">
+                        <label class="text-sm text-gray-600">BM25</label>
+                        <input type="number" id="bm25Weight" value="0.5" step="0.1" min="0" max="1"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md" 
+                               onchange="validateWeights()">
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-sm text-gray-600">Vector</label>
+                        <input type="number" id="vectorWeight" value="0.5" step="0.1" min="0" max="1"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md"
+                               onchange="validateWeights()">
+                    </div>
+                </div>
+                <div id="weightWarning" class="text-red-500 text-sm hidden">Сумма весов должна быть равна 1</div>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    Поисковые запросы (каждый с новой строки)
+                </label>
+                <textarea id="queries" rows="5" class="w-full px-3 py-2 border border-gray-300 rounded-md" 
+                        placeholder="Введите запросы, каждый с новой строки"></textarea>
+            </div>
+            
+            <div class="flex gap-4">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Количество результатов</label>
+                    <input type="number" id="topK" value="5" min="1" max="20" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Размер батча</label>
+                    <input type="number" id="batchSize" value="10" min="1" max="20"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+            </div>
+            
+            <button type="submit" class="w-full bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">
+                Поиск
+            </button>
+        </form>
+
+        <div class="mt-6">
+            <div class="flex items-center gap-2 mb-4">
+                <h2 class="text-lg font-semibold">Результаты</h2>
+                <div id="loader" class="hidden">
+                    <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                </div>
+                <span id="searchTime" class="text-sm text-gray-500"></span>
+            </div>
+            <div id="results" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <script>
+        function toggleWeights() {
+            const method = document.getElementById('method').value;
+            const weightsSection = document.getElementById('weightsSection');
+            if (method === 'hybrid') {
+                weightsSection.classList.remove('hidden');
+            } else {
+                weightsSection.classList.add('hidden');
+            }
+        }
+
+        function validateWeights() {
+            const bm25Weight = parseFloat(document.getElementById('bm25Weight').value);
+            const vectorWeight = parseFloat(document.getElementById('vectorWeight').value);
+            const warning = document.getElementById('weightWarning');
+            
+            const sum = bm25Weight + vectorWeight;
+            if (Math.abs(sum - 1.0) < 0.01) {
+                warning.classList.add('hidden');
+                return true;
+            } else {
+                warning.classList.remove('hidden');
+                return false;
+            }
+        }
+
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const queriesText = document.getElementById('queries').value.trim();
+            if (!queriesText) {
+                alert('Пожалуйста, введите поисковые запросы');
+                return;
+            }
+
+            const method = document.getElementById('method').value;
+            if (method === 'hybrid' && !validateWeights()) {
+                alert('Проверьте веса для гибридного поиска');
+                return;
+            }
+
+            // Разделяем строки и фильтруем пустые
+            const queries = queriesText.split('\n')
+                .map(q => q.trim())
+                .filter(q => q.length > 0);
+
+            if (queries.length === 0) {
+                alert('Пожалуйста, введите хотя бы один запрос');
+                return;
+            }
+
+            const loader = document.getElementById('loader');
+            const resultsDiv = document.getElementById('results');
+            const searchTimeSpan = document.getElementById('searchTime');
+            
+            loader.classList.remove('hidden');
+            resultsDiv.innerHTML = '';
+            searchTimeSpan.textContent = '';
+
+            try {
+                const requestData = {
+                    queries: queries,
+                    method: method,
+                    top_k: parseInt(document.getElementById('topK').value),
+                    batch_size: parseInt(document.getElementById('batchSize').value),
+                };
+
+                // Добавляем веса только для гибридного поиска
+                if (method === 'hybrid') {
+                    requestData.weights = {
+                        bm25: parseFloat(document.getElementById('bm25Weight').value),
+                        vector: parseFloat(document.getElementById('vectorWeight').value)
+                    };
+                }
+
+                console.log('Sending request:', requestData);
+
+                const response = await fetch('/api/search/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+                
+                if (data.results && data.results.length > 0) {
+                    searchTimeSpan.textContent = `Общее время: ${data.total_time} сек`;
+                    
+                    data.results.forEach((queryResult, queryIndex) => {
+                        const queryDiv = document.createElement('div');
+                        queryDiv.className = 'mb-6';
+                        queryDiv.innerHTML = `
+                            <h3 class="font-semibold text-lg mb-2">
+                                Запрос ${queryIndex + 1}: "${queryResult.query}"
+                                <span class="text-sm text-gray-500">(${queryResult.time_taken} сек)</span>
+                            </h3>
+                        `;
+
+                        const resultsDiv = document.createElement('div');
+                        resultsDiv.className = 'space-y-3';
+                        
+                        queryResult.results.forEach((result, index) => {
+                            resultsDiv.innerHTML += `
+                                <div class="p-4 border border-gray-200 rounded-lg">
+                                    <h4 class="font-semibold">${index + 1}. ${result.title}</h4>
+                                    <p class="text-gray-600 mt-1">${result.summary}</p>
+                                    <div class="mt-2 text-sm">
+                                        <span class="text-blue-500">Score: ${result.score.toFixed(3)}</span> | 
+                                        <a href="${result.url}" target="_blank" class="text-blue-500 hover:underline">
+                                            Ссылка на источник
+                                        </a>
+                                    </div>
+                                </div>
+                            `;
+                        });
+
+                        queryDiv.appendChild(resultsDiv);
+                        document.getElementById('results').appendChild(queryDiv);
+                    });
+                } else {
+                    resultsDiv.innerHTML = '<p class="text-gray-500">Результаты не найдены</p>';
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="text-red-500">Ошибка: ${error.message}</p>`;
+            } finally {
+                loader.classList.add('hidden');
+            }
+        });
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleWeights();
+            validateWeights();
+        });
+    </script>
+</body>
+</html>
