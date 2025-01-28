@@ -1,4 +1,3 @@
-# app/models/schemas.py
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Literal
 from datetime import datetime
@@ -9,7 +8,7 @@ class SearchQuery(BaseModel):
     """
     queries: List[str] = Field(
         description="Список поисковых запросов для пакетного поиска",
-        example=["протесты в москве", "экономика россии"],
+        example=["нефть", "экономика россии"],
         min_items=1,
         max_items=20  # ограничиваем максимальное количество запросов
     )
@@ -48,7 +47,7 @@ class SearchQuery(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "queries": ["экономика россии 2024"],
+                "queries": ["экономика россии"],
                 "method": "hybrid",
                 "top_k": 5,
                 "batch_size": 10,
