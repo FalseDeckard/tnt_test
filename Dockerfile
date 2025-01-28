@@ -1,6 +1,6 @@
 FROM python:3.10-slim
 
-RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget dos2unix && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONPATH=/app
 
@@ -11,11 +11,10 @@ WORKDIR /app
 
 COPY . /app
 
-COPY download_data.sh /app/download_data.sh
-RUN chmod +x /app/download_data.sh
+RUN dos2unix /app/download_data.sh && chmod +x /app/download_data.sh
+
+RUN ./download_data.sh
 
 RUN python -c "from sentence_transformers import SentenceTransformer; model = SentenceTransformer('deepvk/USER-bge-m3')"
-
-RUN /app/download_data.sh
 
 CMD ["python", "-m", "app.main"]
