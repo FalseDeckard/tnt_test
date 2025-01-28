@@ -1,0 +1,12 @@
+faiss_cpu==1.9.0.post1
+fastapi==0.115.7
+nltk==3.9.1
+numpy==2.2.2
+pydantic==2.10.6
+pymorphy3==2.0.2
+rank_bm25==0.2.2
+sentence_transformers==3.3.1
+tnt_test==0.1
+torch==2.5.1
+tqdm==4.67.1
+uvicorn==0.34.0
