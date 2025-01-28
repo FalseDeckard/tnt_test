@@ -48,7 +48,7 @@ class TextSearch:
         """
         try:
             self.morph = pymorphy3.MorphAnalyzer()
-            nltk.download('punkt', quiet=True)
+            nltk.download('punkt_tab', quiet=True)
             nltk.download('stopwords', quiet=True)
             self.stop_words = set(stopwords.words('russian'))
             self.logger.info("Text processing tools initialized")

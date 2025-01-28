@@ -119,45 +119,42 @@ class VectorSearch:
             embeddings.append(batch_emb.cpu().numpy())
         return np.vstack(embeddings)
 
+    def normalize_scores(self, distances):
+        return (distances)
+    
     def batch_search(self, queries, top_k = 5):
-        """Выполняет пакетный поиск по списку запросов.
-        
-        Args:
-            queries (List[str]): Список поисковых запросов
-            top_k (int): Количество возвращаемых результатов на запрос
-            
-        Returns:
-            List[List[Dict]]: Результаты поиска в формате:
-                [{
-                    'title': str,
-                    'summary': str,
-                    'url': str,
-                    'date': str,
-                    'score': float
-                }, ...]
-        """
         try:
-            query_emb = self.batch_encode(queries)
-            distances, indices = self.index.search(
-                query_emb.astype(np.float32), top_k)
+            # Получаем эмбеддинги для всех запросов
+            query_embeddings = self.batch_encode(queries)
             
-            return [[self._format_result(idx, score) 
-                   for idx, score in zip(q_indices, q_scores)] 
-                   for q_indices, q_scores in zip(indices, distances)]
+            # Поиск в FAISS
+            distances, indices = self.index.search(
+                query_embeddings.astype(np.float32), 
+                top_k
+            )
+            
+            # Нормализуем scores
+            normalized_scores = [self.normalize_scores(d) for d in distances]
+            
+            # Форматируем результаты
+            all_results = []
+            for query_indices, query_scores in zip(indices, normalized_scores):
+                results = []
+                for idx, score in zip(query_indices, query_scores):
+                    doc = self.documents[idx]
+                    results.append({
+                        'title': doc['title'],
+                        'summary': doc['summary'],
+                        'url': doc['url'],
+                        'date': doc['date'],
+                        'score': float(score),
+                    })
+                all_results.append(results)
+            
+            return all_results
         except Exception as e:
-            self.logger.error(f"Search error: {e}")
+            self.logger.error(f"Error during batch search: {e}")
             return [[] for _ in queries]
-
-    def _format_result(self, doc_idx, score):
-        """Форматирует результат поиска в стандартный формат."""
-        doc = self.documents[doc_idx]
-        return {
-            'title': doc['title'],
-            'summary': doc['summary'],
-            'url': doc['url'],
-            'date': doc['date'],
-            'score': float(score)
-        }
 
     def search(self, query, top_k = 5):
         """Поиск по одному запросу.
