@@ -13,6 +13,14 @@ class FakeSearcher:
 
 
 class SearchManagerTests(unittest.TestCase):
+    def test_query_normalizes_surrounding_whitespace(self):
+        query = SearchQuery(queries=["  test query  "])
+        self.assertEqual(query.queries, ["test query"])
+
+    def test_query_rejects_whitespace_only_text(self):
+        with self.assertRaisesRegex(ValueError, "non-whitespace"):
+            SearchQuery(queries=["   "])
+
     def test_uninitialized_manager_is_not_ready(self):
         with self.assertRaises(HTTPException) as context:
             readiness(SearchManager())

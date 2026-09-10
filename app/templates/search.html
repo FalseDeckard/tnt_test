@@ -78,6 +78,20 @@
     </div>
 
     <script>
+        function escapeHtml(value) {
+            const characters = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+            return String(value).replace(/[&<>"']/g, character => characters[character]);
+        }
+
+        function safeUrl(value) {
+            try {
+                const url = new URL(value, window.location.origin);
+                return ['http:', 'https:'].includes(url.protocol) ? url.href : '#';
+            } catch {
+                return '#';
+            }
+        }
+
         function toggleWeights() {
             const method = document.getElementById('method').value;
             const weightsSection = document.getElementById('weightsSection');
@@ -163,6 +177,10 @@
                 });
 
                 const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(typeof data.detail === 'string' ? data.detail : 'Ошибка поиска');
+                }
                 
                 if (data.results && data.results.length > 0) {
                     searchTimeSpan.textContent = `Общее время: ${data.total_time} сек`;
@@ -172,7 +190,7 @@
                         queryDiv.className = 'mb-6';
                         queryDiv.innerHTML = `
                             <h3 class="font-semibold text-lg mb-2">
-                                Запрос ${queryIndex + 1}: "${queryResult.query}"
+                                Запрос ${queryIndex + 1}: "${escapeHtml(queryResult.query)}"
                                 <span class="text-sm text-gray-500">(${queryResult.time_taken} сек)</span>
                             </h3>
                         `;
@@ -183,11 +201,11 @@
                         queryResult.results.forEach((result, index) => {
                             resultsDiv.innerHTML += `
                                 <div class="p-4 border border-gray-200 rounded-lg">
-                                    <h4 class="font-semibold">${index + 1}. ${result.title}</h4>
-                                    <p class="text-gray-600 mt-1">${result.summary}</p>
+                                    <h4 class="font-semibold">${index + 1}. ${escapeHtml(result.title)}</h4>
+                                    <p class="text-gray-600 mt-1">${escapeHtml(result.summary)}</p>
                                     <div class="mt-2 text-sm">
                                         <span class="text-blue-500">Score: ${result.score.toFixed(3)}</span> | 
-                                        <a href="${result.url}" target="_blank" class="text-blue-500 hover:underline">
+                                        <a href="${safeUrl(result.url)}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline">
                                             Ссылка на источник
                                         </a>
                                     </div>
@@ -202,7 +220,7 @@
                     resultsDiv.innerHTML = '<p class="text-gray-500">Результаты не найдены</p>';
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<p class="text-red-500">Ошибка: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<p class="text-red-500">Ошибка: ${escapeHtml(error.message)}</p>`;
             } finally {
                 loader.classList.add('hidden');
             }
