@@ -1,11 +1,13 @@
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 import faiss
 import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
 
+from app.core.vector_results import bounded_top_k, format_results, validate_artifacts
 from app.data.documents import read_documents
 
 
@@ -25,7 +27,7 @@ class VectorSearch:
         model (SentenceTransformer): Модель для кодирования текстов
     """
     
-    _model_instance = None  # Кэш модели на уровне класса
+    _models: ClassVar[dict[tuple[str, str], SentenceTransformer]] = {}
 
     def __init__(self, 
                  data_dir: str = "data/processed",
@@ -62,7 +64,13 @@ class VectorSearch:
             self.documents = read_documents(docs_path)
             
             # Загрузка эмбеддингов из .npy файла
-            self.embeddings = np.load(self.data_dir / "embeddings.npy")
+            self.embeddings = np.load(
+                self.data_dir / "embeddings.npy",
+                allow_pickle=False,
+            )
+            validate_artifacts(len(self.documents), self.embeddings.shape)
+            if not np.isfinite(self.embeddings).all():
+                raise ValueError("Embeddings contain non-finite values")
             
             self.logger.info(f"Loaded {len(self.documents)} documents and embeddings")
         except Exception as e:
@@ -82,8 +90,9 @@ class VectorSearch:
             
             # Перенос индекса на GPU при наличии
             if self.device == "cuda" and faiss.get_num_gpus() > 0:
+                self._gpu_resources = faiss.StandardGpuResources()
                 self.index = faiss.index_cpu_to_gpu(
-                    faiss.StandardGpuResources(), 0, self.index)
+                    self._gpu_resources, 0, self.index)
             
             self.logger.info(f"FAISS index initialized (dim={dimension})")
         except Exception as e:
@@ -92,11 +101,12 @@ class VectorSearch:
 
     def _initialize_model(self, model_name):
         """Инициализирует или получает кэшированную модель эмбеддингов."""
-        if VectorSearch._model_instance is None:
+        cache_key = (model_name, self.device)
+        if cache_key not in self._models:
             self.logger.info(f"Loading model: {model_name}")
-            VectorSearch._model_instance = SentenceTransformer(
+            self._models[cache_key] = SentenceTransformer(
                 model_name, device=self.device)
-        self.model = VectorSearch._model_instance
+        self.model = self._models[cache_key]
 
     def batch_encode(self, queries):
         """Кодирует список запросов в векторные представления.
@@ -107,6 +117,9 @@ class VectorSearch:
         Returns:
             np.ndarray: Массив эмбеддингов формы (N, D)
         """
+        if not queries:
+            return np.empty((0, self.index.d), dtype=np.float32)
+
         embeddings = []
         for i in range(0, len(queries), self.batch_size):
             batch = queries[i:i + self.batch_size]
@@ -119,42 +132,26 @@ class VectorSearch:
             embeddings.append(batch_emb.cpu().numpy())
         return np.vstack(embeddings)
 
-    def normalize_scores(self, distances):
-        return (distances)
-    
     def batch_search(self, queries, top_k = 5):
-        try:
-            # Получаем эмбеддинги для всех запросов
-            query_embeddings = self.batch_encode(queries)
-            
-            # Поиск в FAISS
-            distances, indices = self.index.search(
-                query_embeddings.astype(np.float32), 
-                top_k
+        if not queries:
+            return []
+
+        query_embeddings = self.batch_encode(queries)
+        if query_embeddings.shape[1] != self.index.d:
+            raise ValueError(
+                "Query and document embedding dimensions differ: "
+                f"{query_embeddings.shape[1]} != {self.index.d}"
             )
-            
-            # Нормализуем scores
-            normalized_scores = [self.normalize_scores(d) for d in distances]
-            
-            # Форматируем результаты
-            all_results = []
-            for query_indices, query_scores in zip(indices, normalized_scores):
-                results = []
-                for idx, score in zip(query_indices, query_scores):
-                    doc = self.documents[idx]
-                    results.append({
-                        'title': doc['title'],
-                        'summary': doc['summary'],
-                        'url': doc['url'],
-                        'date': doc['date'],
-                        'score': float(score),
-                    })
-                all_results.append(results)
-            
-            return all_results
-        except Exception as e:
-            self.logger.error(f"Error during batch search: {e}")
-            return [[] for _ in queries]
+
+        limit = bounded_top_k(top_k, len(self.documents))
+        distances, indices = self.index.search(
+            query_embeddings.astype(np.float32),
+            limit,
+        )
+        return [
+            format_results(self.documents, query_indices, query_scores)
+            for query_indices, query_scores in zip(indices, distances)
+        ]
 
     def search(self, query, top_k = 5):
         """Поиск по одному запросу.
@@ -166,11 +163,7 @@ class VectorSearch:
         Returns:
             List[Dict]: Отсортированные результаты поиска
         """
-        try:
-            return self.batch_search([query], top_k)[0]
-        except Exception as e:
-            self.logger.error(f"Search error: {e}")
-            return []
+        return self.batch_search([query], top_k)[0]
 
     def cleanup(self):
         """Освобождает ресурсы и очищает GPU кеш."""
