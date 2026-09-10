@@ -1,13 +1,5 @@
-from .api import router
-from .models import SearchQuery, SearchResponse, TimedSearchResult
-from .core import VectorSearch, TextSearch, HybridSearch
+"""Search application package.
 
-__all__ = [
-    'router',
-    'SearchQuery',
-    'SearchResponse',
-    'TimedSearchResult',
-    'VectorSearch',
-    'TextSearch',
-    'HybridSearch'
-]
+Import concrete components from their modules to avoid loading the full search
+stack as a side effect of importing a lightweight utility.
+"""
