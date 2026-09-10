@@ -1,10 +1,13 @@
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
-from pathlib import Path
-from app.api.endpoints import router, search_manager
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
+
+from app.api.endpoints import SearchManager, router
 
 """
 Главный модуль приложения FastAPI для поисковой системы.
@@ -36,34 +39,26 @@ except FileNotFoundError:
     """
     logger.error("HTML template file not found!")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Контекстный менеджер для управления жизненным циклом приложения.
-    
-    Выполняет:
-    - Инициализацию поисковых систем при запуске
-    - Очистку ресурсов при завершении
-    
-    Args:
-        app (FastAPI): Экземпляр приложения FastAPI
-    """
-    logger.info("Запуск приложения...")
-    try:
-        # Инициализация поисковых систем
-        await search_manager.initialize()
-        logger.info("Поисковые системы успешно инициализированы")
-        yield
-    finally:
-        # Завершение работы
-        logger.info("Остановка приложения...")
-        search_manager.cleanup()
-        logger.info("Ресурсы успешно освобождены")
+def create_app(search_manager: SearchManager | None = None) -> FastAPI:
+    """Build an application with an injectable search manager."""
+    manager = search_manager or SearchManager()
 
-# Инициализация FastAPI приложения
-app = FastAPI(
-    title="Search API",
-    description="""
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        application.state.search_manager = manager
+        logger.info("Запуск приложения...")
+        try:
+            await run_in_threadpool(manager.initialize)
+            logger.info("Поисковые системы успешно инициализированы")
+            yield
+        finally:
+            logger.info("Остановка приложения...")
+            await run_in_threadpool(manager.cleanup)
+            logger.info("Ресурсы успешно освобождены")
+
+    application = FastAPI(
+        title="Search API",
+        description="""
     API для выполнения поиска по документам с использованием различных методов.
     
     ## Возможности
@@ -105,24 +100,23 @@ app = FastAPI(
     ## Веб-интерфейс
     
     Доступен по адресу `/` для интерактивного тестирования API.
-    """,
-    version="0.0.1",
-    lifespan=lifespan,  # Подключение управления жизненным циклом
-    docs_url="/api/docs",  # URL для Swagger документации
-    redoc_url="/api/redoc"  # URL для Redoc документации
-)
+        """,
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
+    )
 
-# Подключение API роутов
-app.include_router(router, prefix="/api")
+    application.include_router(router, prefix="/api")
 
-# Маршрут для веб-интерфейса
-@app.get("/", response_class=HTMLResponse)
-async def get_search_page():
-    """
-    Возвращает HTML страницу поискового интерфейса.
+    @application.get("/", response_class=HTMLResponse)
+    async def get_search_page():
+        return HTML_CONTENT
 
-    """
-    return HTML_CONTENT
+    return application
+
+
+app = create_app()
 
 if __name__ == "__main__":
     """

@@ -3,11 +3,9 @@ import time
 from collections.abc import Sequence
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
-from app.core.fulltext_search import TextSearch
-from app.core.hybrid_search import HybridSearch
-from app.core.vector_search import VectorSearch
 from app.models.schemas import SearchQuery, SearchResponse, TimedSearchResult
 
 router = APIRouter()
@@ -30,11 +28,11 @@ class SearchManager:
         """Инициализация менеджера с указанием директории данных."""
         self.data_dir = data_dir
         self.searchers: dict[str, Any] = {}
-        self._vector_search: VectorSearch | None = None
-        self._text_search: TextSearch | None = None
+        self._vector_search: Any | None = None
+        self._text_search: Any | None = None
         self.logger = logging.getLogger(__name__)
 
-    async def initialize(self):
+    def initialize(self):
         """
         Асинхронная инициализация поисковых систем.
 
@@ -49,6 +47,10 @@ class SearchManager:
         if not self.searchers:
             self.logger.info("Initializing search engines...")
             try:
+                from app.core.fulltext_search import TextSearch
+                from app.core.hybrid_search import HybridSearch
+                from app.core.vector_search import VectorSearch
+
                 # Инициализация базовых поисковых систем
                 self._vector_search = VectorSearch(data_dir=self.data_dir)
                 self.logger.info("Vector search initialized")
@@ -99,6 +101,10 @@ class SearchManager:
             yield items[start : start + batch_size]
 
     async def search(self, query: SearchQuery) -> SearchResponse:
+        """Run CPU-bound retrieval outside the server event loop."""
+        return await run_in_threadpool(self._search, query)
+
+    def _search(self, query: SearchQuery) -> SearchResponse:
         """
         Основной метод выполнения поиска.
 
@@ -200,8 +206,20 @@ class SearchManager:
             )
 
 
-# Экземпляр менеджера, используемый приложением
-search_manager = SearchManager()
+def get_search_manager(request: Request) -> SearchManager:
+    return request.app.state.search_manager
+
+
+@router.get("/health/live", summary="Проверить состояние процесса")
+def liveness():
+    return {"status": "ok"}
+
+
+@router.get("/health/ready", summary="Проверить готовность поиска")
+def readiness(manager: SearchManager = Depends(get_search_manager)):
+    if not manager.searchers:
+        raise HTTPException(status_code=503, detail="Search engines not initialized")
+    return {"status": "ready"}
 
 
 @router.post(
@@ -220,7 +238,10 @@ search_manager = SearchManager()
     """,
     response_description="Результаты поиска с временем выполнения и оценками релевантности",
 )
-async def search(query: SearchQuery):
+async def search(
+    query: SearchQuery,
+    manager: SearchManager = Depends(get_search_manager),
+):
     """
     Основной endpoint для выполнения поиска документов.
 
@@ -239,4 +260,4 @@ async def search(query: SearchQuery):
         - 503: Поисковые системы не инициализированы
         - 500: Внутренняя ошибка при выполнении поиска
     """
-    return await search_manager.search(query)
+    return await manager.search(query)
