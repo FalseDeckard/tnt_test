@@ -3,7 +3,7 @@ import time
 from collections.abc import Sequence
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from app.models.schemas import SearchQuery, SearchResponse, TimedSearchResult
@@ -210,6 +210,14 @@ def get_search_manager(request: Request) -> SearchManager:
     return request.app.state.search_manager
 
 
+def enforce_search_access(
+    request: Request,
+    api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    client_id = request.client.host if request.client else "unknown"
+    request.app.state.request_guard.check(api_key, client_id)
+
+
 @router.get("/health/live", summary="Проверить состояние процесса")
 def liveness():
     return {"status": "ok"}
@@ -241,6 +249,7 @@ def readiness(manager: SearchManager = Depends(get_search_manager)):
 async def search(
     query: SearchQuery,
     manager: SearchManager = Depends(get_search_manager),
+    _access: None = Depends(enforce_search_access),
 ):
     """
     Основной endpoint для выполнения поиска документов.
