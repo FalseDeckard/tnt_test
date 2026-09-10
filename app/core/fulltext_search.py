@@ -1,12 +1,15 @@
-from rank_bm25 import BM25Okapi
-import json
+import logging
 from pathlib import Path
-import numpy as np
-from nltk.tokenize import word_tokenize
+
 import nltk
+import numpy as np
 import pymorphy3
 from nltk.corpus import stopwords
-import logging
+from nltk.tokenize import word_tokenize
+from rank_bm25 import BM25Okapi
+
+from app.data.documents import read_documents
+
 
 class TextSearch:
     """Класс для полнотекстового поиска с использованием BM25 и кэшированием запросов.
@@ -23,7 +26,7 @@ class TextSearch:
         stop_words (Set[str]): Стоп-слова русского языка
     """
     
-    def __init__(self, data_dir = "processed_data", batch_size = 32):
+    def __init__(self, data_dir = "data/processed", batch_size = 32):
         """Инициализация поисковой системы и загрузка данных."""
         logging.basicConfig(
             level=logging.INFO,
@@ -68,18 +71,14 @@ class TextSearch:
             docs_path = self.data_dir / "processed_documents.jsonl"
             self.logger.info(f"Loading documents from {docs_path}")
             
-            self.documents = []
-            with open(docs_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    doc = json.loads(line.strip())
-                    self.documents.append(doc)
+            self.documents = read_documents(docs_path)
             
             self.logger.info(f"Loaded {len(self.documents)} documents")
         except FileNotFoundError as e:
             self.logger.error(f"Data file not found: {e}")
             raise
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Error parsing JSON: {e}")
+        except (TypeError, ValueError) as e:
+            self.logger.error(f"Invalid document artifact: {e}")
             raise
         except Exception as e:
             self.logger.error(f"Unexpected error loading data: {e}")

@@ -1,11 +1,13 @@
 import asyncio
-import json
-import numpy as np
-from pathlib import Path
-from datetime import datetime
 import logging
-from app.models.schemas import SearchQuery
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+
 from app.api.endpoints import search_manager
+from app.data.documents import read_documents
+from app.models.schemas import SearchQuery
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,11 +23,7 @@ class DatasetEvaluator:
     def _load_documents(self):
         """Загружает основной датасет"""
         docs_path = self.data_dir / "processed_documents.jsonl"
-        documents = []
-        with open(docs_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                documents.append(json.loads(line.strip()))
-        return documents
+        return read_documents(docs_path)
 
     def _get_test_queries(self):
         """

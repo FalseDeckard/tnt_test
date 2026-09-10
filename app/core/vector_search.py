@@ -1,10 +1,13 @@
-from sentence_transformers import SentenceTransformer
-import numpy as np
-import faiss
-import torch
-import json
-from pathlib import Path
 import logging
+from pathlib import Path
+
+import faiss
+import numpy as np
+import torch
+from sentence_transformers import SentenceTransformer
+
+from app.data.documents import read_documents
+
 
 class VectorSearch:
     """Класс для векторного поиска с использованием FAISS и Sentence Transformers.
@@ -25,7 +28,7 @@ class VectorSearch:
     _model_instance = None  # Кэш модели на уровне класса
 
     def __init__(self, 
-                 data_dir: str = "processed_data",
+                 data_dir: str = "data/processed",
                  model_name = "deepvk/USER-bge-m3",
                  device = None,
                  batch_size = 32):
@@ -56,10 +59,7 @@ class VectorSearch:
         try:
             # Загрузка документов из JSONL
             docs_path = self.data_dir / "processed_documents.jsonl"
-            self.documents = []
-            with open(docs_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    self.documents.append(json.loads(line.strip()))
+            self.documents = read_documents(docs_path)
             
             # Загрузка эмбеддингов из .npy файла
             self.embeddings = np.load(self.data_dir / "embeddings.npy")
