@@ -1,13 +1,10 @@
 import logging
 from pathlib import Path
 
-import nltk
 import numpy as np
-import pymorphy3
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 from rank_bm25 import BM25Okapi
 
+from app.core.text_processing import TextPreprocessor
 from app.data.documents import read_documents
 
 
@@ -38,26 +35,10 @@ class TextSearch:
         self.query_cache = {}
         self.max_cache_size = 1000
         
-        self.setup_text_processing()
+        self.text_processor = TextPreprocessor()
         self.load_data()
         self.init_bm25()
         self.logger.info("Text search initialized successfully")
-
-    def setup_text_processing(self):
-        """Инициализация инструментов обработки текста.
-        
-        Raises:
-            Exception: При ошибках загрузки NLP-ресурсов
-        """
-        try:
-            self.morph = pymorphy3.MorphAnalyzer()
-            nltk.download('punkt_tab', quiet=True)
-            nltk.download('stopwords', quiet=True)
-            self.stop_words = set(stopwords.words('russian'))
-            self.logger.info("Text processing tools initialized")
-        except Exception as e:
-            self.logger.error(f"Error setting up text processing: {e}")
-            raise
 
     def load_data(self):
         """Загрузка предобработанных документов из JSONL-файла.
@@ -127,15 +108,7 @@ class TextSearch:
             return self.query_cache[text]
         
         try:
-            tokens = word_tokenize(text.lower(), language='russian')
-            processed_tokens = []
-            for token in tokens:
-                if token in self.stop_words or not any(c.isalpha() for c in token):
-                    continue
-                lemma = self.morph.parse(token)[0].normal_form
-                processed_tokens.append(lemma)
-            
-            processed = ' '.join(processed_tokens)
+            processed = self.text_processor.full_clean(text)
             self._cache_query(text, processed)
             return processed
         except Exception as e:
