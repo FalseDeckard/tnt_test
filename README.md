@@ -122,6 +122,10 @@ tnt_test/
 ## Оценка качества
 
 - Отчет находится по пути data/evaluation/search_evaluation_report_20250128_175139.txt.
+- Стандартные метрики ранжирования MRR, Recall@k и nDCG@k реализованы в
+  `app/evaluation/metrics.py` и требуют ручной разметки релевантных URL.
+- Формат разметки `query -> [relevant_url, ...]` показан в
+  `data/evaluation/qrels.example.json`.
 
 ## Особенности и ограничения
 
