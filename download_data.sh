@@ -24,13 +24,30 @@ CHECKSUMS=(
   "3963ca7e2313c4bb75a4140abd614e17d98199c9f03f03490ab6afb19bfbf6cf"
 )
 
+verify_checksum() {
+  local file="$1"
+  local expected="$2"
+  local actual
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum "$file" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$file" | awk '{print $1}')"
+  else
+    echo "Neither sha256sum nor shasum is available" >&2
+    return 1
+  fi
+
+  [[ "$actual" == "$expected" ]]
+}
+
 download_verified() {
   local target="$1"
   local url="$2"
   local checksum="$3"
   local partial="${target}.part"
 
-  if [[ -f "$target" ]] && echo "$checksum  $target" | sha256sum --check --status; then
+  if [[ -f "$target" ]] && verify_checksum "$target" "$checksum"; then
     echo "Verified existing file: $target"
     return
   fi
@@ -42,7 +59,11 @@ download_verified() {
     return 1
   fi
 
-  echo "$checksum  $partial" | sha256sum --check
+  if ! verify_checksum "$partial" "$checksum"; then
+    echo "Checksum mismatch: $target" >&2
+    rm -f "$partial"
+    return 1
+  fi
   mv "$partial" "$target"
   echo "Downloaded and verified: $target"
 }

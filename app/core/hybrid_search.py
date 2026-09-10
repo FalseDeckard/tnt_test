@@ -16,7 +16,7 @@ class SearchBackend(Protocol):
 class HybridSearch:
     """Combine BM25 and vector results without per-request shared state."""
 
-    DEFAULT_WEIGHTS: ClassVar[Weights] = {"bm25": 0.6, "vector": 0.4}
+    DEFAULT_WEIGHTS: ClassVar[Weights] = {"bm25": 0.5, "vector": 0.5}
 
     def __init__(
         self,

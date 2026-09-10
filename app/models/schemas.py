@@ -28,6 +28,14 @@ class SearchQuery(BaseModel):
         description="Веса для гибридного поиска (bm25 и vector)",
     )
 
+    @field_validator("queries")
+    @classmethod
+    def normalize_queries(cls, queries: list[str]) -> list[str]:
+        normalized = [query.strip() for query in queries]
+        if any(not query for query in normalized):
+            raise ValueError("Queries must contain non-whitespace text")
+        return normalized
+
     @field_validator("weights")
     @classmethod
     def validate_weights(cls, v):
@@ -62,7 +70,7 @@ class SearchResult(BaseModel):
     summary: str = Field(description="Краткое содержание документа")
     url: str = Field(description="URL источника")
     date: str = Field(description="Дата публикации")
-    score: float = Field(description="Оценка релевантности (0 до 1)")
+    score: float = Field(description="Оценка ранжирования поискового метода")
 
 
 class TimedSearchResult(BaseModel):

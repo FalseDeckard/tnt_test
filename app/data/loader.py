@@ -207,7 +207,6 @@ if __name__ == "__main__":
         batch_size=16,
         output_dir="data/processed",
         input_file="data/raw/gazeta_test.jsonl",
-        device="cuda"
     )
     
     docs, embeddings, id_mapping = processor.process_dataset()
