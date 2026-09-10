@@ -37,6 +37,7 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+data/evaluation/search_evaluation_*.json
 
 # Logs
 *.log
