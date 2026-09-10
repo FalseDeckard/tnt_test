@@ -1,16 +1,19 @@
-from sentence_transformers import SentenceTransformer
-import numpy as np
-import torch
-import json
-import re
-from tqdm import tqdm
-from pathlib import Path
 import gc
+import json
 import logging
-import pymorphy3
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
+import re
+from pathlib import Path
+
 import nltk
+import numpy as np
+import pymorphy3
+import torch
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
+
+from app.data.documents import write_documents
 
 nltk.download('punkt_tab')
 nltk.download('stopwords')
@@ -89,15 +92,15 @@ class DatasetProcessor:
     def __init__(self, 
                  model_name: str = "deepvk/USER-bge-m3",
                  batch_size: int = 16,
-                 output_dir: str = "processed_data",
-                 input_file: str = "dataset.jsonl",
+                 output_dir: str = "data/processed",
+                 input_file: str = "data/raw/gazeta_test.jsonl",
                  device: str = None):
         
         self.model_name = model_name
         self.batch_size = batch_size
         self.output_dir = Path(output_dir)
         self.input_file = Path(input_file)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.text_processor = TextPreprocessor()
         
         if device is None:
@@ -156,7 +159,7 @@ class DatasetProcessor:
                 'text_processed': self.text_processor.full_clean(doc['text']),
             }
         except Exception as e:
-            self.logger.error(f"Error preparing document: {str(e)}")
+            self.logger.error(f"Error preparing document: {e!s}")
             return None
 
     @torch.no_grad()
@@ -237,13 +240,18 @@ class DatasetProcessor:
                     elif self.device == "mps":
                         torch.mps.empty_cache()
             
+            if not all_embeddings:
+                raise ValueError("No documents were processed successfully")
+
             final_embeddings = np.vstack(all_embeddings)
             self.logger.info(f"Final embeddings shape: {final_embeddings.shape}")
             
             np.save(self.output_dir / "embeddings.npy", final_embeddings)
             
-            with (self.output_dir / "documents.json").open('w', encoding='utf-8') as f:
-                json.dump(all_docs, f, ensure_ascii=False, indent=2)
+            write_documents(
+                self.output_dir / "processed_documents.jsonl",
+                all_docs,
+            )
             
             id_mapping = {doc['id']: idx for idx, doc in enumerate(all_docs)}
             with (self.output_dir / "id_mapping.json").open('w', encoding='utf-8') as f:
