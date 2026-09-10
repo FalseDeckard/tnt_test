@@ -72,6 +72,15 @@ class HybridSearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             HybridSearch(self.text, self.vector, weights={})
 
+    def test_backend_failures_are_not_hidden(self) -> None:
+        class FailingSearch:
+            def search(self, query, top_k):
+                raise RuntimeError("backend failed")
+
+        search = HybridSearch(FailingSearch(), FakeSearch([]))
+        with self.assertRaisesRegex(RuntimeError, "backend failed"):
+            search.search("query")
+
 
 if __name__ == "__main__":
     unittest.main()

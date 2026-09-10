@@ -71,21 +71,17 @@ class HybridSearch:
         weights: Weights | None = None,
     ) -> list[SearchResult]:
         """Search both backends and combine their scores."""
-        try:
-            requested_weights = self.weights if weights is None else weights
-            effective_weights = self._normalize_weights(requested_weights)
-            candidate_count = top_k * 2
-            text_results = self.text_search.search(query, top_k=candidate_count)
-            vector_results = self.vector_search.search(query, top_k=candidate_count)
-            return self._combine_results(
-                text_results,
-                vector_results,
-                top_k,
-                effective_weights,
-            )
-        except Exception:
-            self.logger.exception("Hybrid search failed for query %r", query)
-            return []
+        requested_weights = self.weights if weights is None else weights
+        effective_weights = self._normalize_weights(requested_weights)
+        candidate_count = top_k * 2
+        text_results = self.text_search.search(query, top_k=candidate_count)
+        vector_results = self.vector_search.search(query, top_k=candidate_count)
+        return self._combine_results(
+            text_results,
+            vector_results,
+            top_k,
+            effective_weights,
+        )
 
     @staticmethod
     def _combine_results(
