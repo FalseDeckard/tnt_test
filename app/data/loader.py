@@ -1,77 +1,15 @@
 import gc
 import json
 import logging
-import re
 from pathlib import Path
 
-import nltk
 import numpy as np
-import pymorphy3
 import torch
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
+from app.core.text_processing import TextPreprocessor
 from app.data.documents import write_documents
-
-nltk.download('punkt_tab')
-nltk.download('stopwords')
-
-class TextPreprocessor:
-    """Класс для предварительной обработки текстовых данных.
-    
-    Выполняет:
-    - Базовую очистку текста (удаление спецсимволов, нормализация пробелов)
-    - Полную обработку для BM25 (токенизация, удаление стоп-слов, лемматизация)
-    
-    Attributes:
-        stop_words (set): Множество стоп-слов русского языка
-        morph (pymorphy3.MorphAnalyzer): Морфологический анализатор
-    """
-    
-    def __init__(self):
-        """Инициализирует стоп-слова и морфологический анализатор."""
-        self.stop_words = set(stopwords.words('russian'))
-        self.morph = pymorphy3.MorphAnalyzer()
-
-    def basic_clean(self, text):
-        """Выполняет базовую очистку текста для генерации эмбеддингов.
-        
-        Args:
-            text (str): Исходный текст для обработки
-            
-        Returns:
-            str: Очищенный текст с удаленными спецсимволами и нормализованными пробелами
-        """
-        if not isinstance(text, str):
-            return ""
-        text = re.sub(r'[^\w\s\.\,\!\?\-\'«»]+', ' ', text)
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
-
-    def full_clean(self, text: str):
-        """Выполняет полную обработку текста для использования в BM25.
-        
-        Args:
-            text (str): Исходный текст для обработки
-            
-        Returns:
-            str: Обработанный текст с лемматизацией и удаленными стоп-словами
-        """
-        if not isinstance(text, str):
-            return ""
-        
-        text = self.basic_clean(text)
-        tokens = word_tokenize(text.lower(), language='russian')
-        processed_tokens = []
-        
-        for token in tokens:
-            if token not in self.stop_words:
-                lemma = self.morph.parse(token)[0].normal_form
-                processed_tokens.append(lemma)
-        
-        return ' '.join(processed_tokens)
 
 
 class DatasetProcessor:
