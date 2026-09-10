@@ -166,8 +166,8 @@ timestamp в имени.
 Локальный быстрый набор проверок:
 
 ```bash
-python -m pip install -r requirements-test.txt
-uvx ruff check .
+python -m pip install -r requirements-test.txt ruff==0.16.6
+ruff check .
 python -m compileall -q app tests
 python -m unittest discover -s tests -v
 git diff --check
