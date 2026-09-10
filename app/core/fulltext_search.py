@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 from rank_bm25 import BM25Okapi
 
+from app.core.ranking import normalize_positive_scores
 from app.core.text_processing import TextPreprocessor
 from app.data.documents import read_documents
 
@@ -107,13 +108,9 @@ class TextSearch:
         if text in self.query_cache:
             return self.query_cache[text]
         
-        try:
-            processed = self.text_processor.full_clean(text)
-            self._cache_query(text, processed)
-            return processed
-        except Exception as e:
-            self.logger.error(f"Error processing text: {e}")
-            return text
+        processed = self.text_processor.full_clean(text)
+        self._cache_query(text, processed)
+        return processed
 
     def batch_search(self, queries, top_k = 5):
         """Пакетный поиск по нескольким запросам.
@@ -128,41 +125,32 @@ class TextSearch:
         Raises:
             Exception: При ошибках во время поиска
         """
-        try:
-            all_results = []
-            for i in range(0, len(queries), self.batch_size):
-                batch = queries[i:i + self.batch_size]
-                batch_results = []
-                
-                for query in batch:
-                    processed_query = self.process_text(query)
-                    query_tokens = processed_query.split()
-                    
-                    scores = self.bm25.get_scores(query_tokens)
-                    top_indices = np.argsort(scores)[-top_k:][::-1]
-                    top_scores = scores[top_indices]
-                    
-                    max_score = np.max(top_scores) if len(top_scores) > 0 else 1
-                    normalized_scores = top_scores / max_score if max_score != 0 else top_scores
-                    
-                    results = []
-                    for idx, score in zip(top_indices, normalized_scores):
-                        doc = self.documents[idx]
-                        results.append({
-                            'title': doc['title'],
-                            'summary': doc['summary'],
-                            'url': doc['url'],
-                            'date': doc['date'],
-                            'score': float(score)
-                        })
-                    batch_results.append(results)
-                
-                all_results.extend(batch_results)
-            
-            return all_results
-        except Exception as e:
-            self.logger.error(f"Error during batch search: {e}")
-            return [[] for _ in queries]
+        all_results = []
+        limit = min(top_k, len(self.documents))
+        for i in range(0, len(queries), self.batch_size):
+            batch = queries[i:i + self.batch_size]
+            for query in batch:
+                query_tokens = self.process_text(query).split()
+                if not query_tokens:
+                    all_results.append([])
+                    continue
+
+                scores = self.bm25.get_scores(query_tokens)
+                top_indices = np.argsort(scores)[::-1][:limit]
+                ranked_scores = normalize_positive_scores(scores, top_indices)
+                results = []
+                for idx, score in ranked_scores:
+                    doc = self.documents[idx]
+                    results.append({
+                        'title': doc['title'],
+                        'summary': doc['summary'],
+                        'url': doc['url'],
+                        'date': doc['date'],
+                        'score': score,
+                    })
+                all_results.append(results)
+
+        return all_results
 
     def search(self, query, top_k= 5):
         """Поиск по одному запросу.
@@ -174,11 +162,7 @@ class TextSearch:
         Returns:
             List[Dict]: Список результатов поиска
         """
-        try:
-            return self.batch_search([query], top_k)[0]
-        except Exception as e:
-            self.logger.error(f"Error during search: {e}")
-            return []
+        return self.batch_search([query], top_k)[0]
 
     def cleanup(self):
         """Очистка ресурсов и кэшей."""
