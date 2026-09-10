@@ -8,6 +8,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
+from app.core.model_config import MODEL_NAME, MODEL_REVISION
 from app.core.text_processing import TextPreprocessor
 from app.data.documents import write_documents
 
@@ -28,13 +29,15 @@ class DatasetProcessor:
     """
     
     def __init__(self, 
-                 model_name: str = "deepvk/USER-bge-m3",
+                 model_name: str = MODEL_NAME,
+                 model_revision: str = MODEL_REVISION,
                  batch_size: int = 16,
                  output_dir: str = "data/processed",
                  input_file: str = "data/raw/gazeta_test.jsonl",
                  device: str = None):
         
         self.model_name = model_name
+        self.model_revision = model_revision
         self.batch_size = batch_size
         self.output_dir = Path(output_dir)
         self.input_file = Path(input_file)
@@ -150,7 +153,10 @@ class DatasetProcessor:
         try:
             self.logger.info("Loading dataset and model...")
             documents = self.load_jsonl()
-            model = SentenceTransformer(self.model_name)
+            model = SentenceTransformer(
+                self.model_name,
+                revision=self.model_revision,
+            )
             
             all_docs = []
             all_embeddings = []

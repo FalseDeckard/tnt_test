@@ -1,0 +1,56 @@
+name: Container smoke test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - ".github/workflows/container.yml"
+      - "Dockerfile"
+      - "download_data.sh"
+      - "requirements.txt"
+      - "app/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build application image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: search-engine-tnt:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container and wait for readiness
+        run: |
+          container_id="$(docker run --detach --publish 8000:8000 search-engine-tnt:ci)"
+          trap 'docker logs "$container_id"; docker rm --force "$container_id"' EXIT
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/api/health/ready; then
+              exit 0
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' "$container_id")" != "true" ]]; then
+              exit 1
+            fi
+            sleep 5
+          done
+          exit 1
