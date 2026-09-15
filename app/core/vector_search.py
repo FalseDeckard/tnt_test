@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from sentence_transformers import SentenceTransformer
 
+from app.core.model_config import MODEL_NAME, MODEL_REVISION
 from app.core.vector_results import bounded_top_k, format_results, validate_artifacts
 from app.data.documents import read_documents
 
@@ -27,11 +28,12 @@ class VectorSearch:
         model (SentenceTransformer): Модель для кодирования текстов
     """
     
-    _models: ClassVar[dict[tuple[str, str], SentenceTransformer]] = {}
+    _models: ClassVar[dict[tuple[str, str, str], SentenceTransformer]] = {}
 
     def __init__(self, 
                  data_dir: str = "data/processed",
-                 model_name = "deepvk/USER-bge-m3",
+                 model_name = MODEL_NAME,
+                 model_revision = MODEL_REVISION,
                  device = None,
                  batch_size = 32):
         """Инициализация векторного поиска и загрузка данных."""
@@ -48,7 +50,7 @@ class VectorSearch:
         
         self.load_data()
         self.init_faiss()
-        self._initialize_model(model_name)
+        self._initialize_model(model_name, model_revision)
         self.logger.info(f"VectorSearch initialized on {self.device}")
 
     def load_data(self):
@@ -99,13 +101,16 @@ class VectorSearch:
             self.logger.error(f"FAISS init error: {e}")
             raise
 
-    def _initialize_model(self, model_name):
+    def _initialize_model(self, model_name, model_revision):
         """Инициализирует или получает кэшированную модель эмбеддингов."""
-        cache_key = (model_name, self.device)
+        cache_key = (model_name, model_revision, self.device)
         if cache_key not in self._models:
-            self.logger.info(f"Loading model: {model_name}")
+            self.logger.info(f"Loading model: {model_name}@{model_revision}")
             self._models[cache_key] = SentenceTransformer(
-                model_name, device=self.device)
+                model_name,
+                revision=model_revision,
+                device=self.device,
+            )
         self.model = self._models[cache_key]
 
     def batch_encode(self, queries):
