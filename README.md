@@ -10,12 +10,15 @@
 - гибридное ранжирование с настраиваемыми весами;
 - до 20 запросов за одно API-обращение;
 - MRR, Recall@k и nDCG@k для оценки по ручной разметке;
-- liveness/readiness endpoints для эксплуатации в контейнере.
+- liveness/readiness endpoints для эксплуатации в контейнере;
+- опциональный API key и ограничение частоты поисковых запросов;
+- локальные frontend-стили без внешнего JavaScript CDN.
 
 ## Как устроен поиск
 
 Векторный поиск кодирует запрос моделью Sentence Transformers и ищет ближайшие
-нормализованные эмбеддинги через FAISS `IndexFlatIP`.
+нормализованные эмбеддинги через FAISS `IndexFlatIP`. Версия модели закреплена
+точным commit hash и одинакова при подготовке данных, сборке образа и поиске.
 
 Текстовый поиск применяет общий для документов и запросов препроцессор: приводит
 текст к нижнему регистру, выделяет Unicode-слова, удаляет русские стоп-слова и
@@ -39,7 +42,8 @@ app/
 ├── data/         # чтение артефактов и подготовка датасета
 ├── evaluation/   # qrels и стандартные ranking-метрики
 ├── models/       # Pydantic-схемы API
-└── templates/    # веб-интерфейс
+├── static/       # локальные стили веб-интерфейса
+└── templates/    # HTML веб-интерфейса
 data/
 ├── raw/          # исходный JSONL
 ├── processed/    # документы, embeddings.npy и id_mapping.json
@@ -53,7 +57,9 @@ tests/            # unit-тесты
 
 ```bash
 docker build -t search-engine-tnt .
-docker run --rm -p 8000:8000 search-engine-tnt
+docker run --rm -p 8000:8000 \
+  --env SEARCH_API_KEY=change-me \
+  search-engine-tnt
 ```
 
 Во время `docker build`:
@@ -101,6 +107,7 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```bash
 curl --request POST http://localhost:8000/api/search/ \
   --header 'Content-Type: application/json' \
+  --header 'X-API-Key: change-me' \
   --data '{
     "queries": ["экономика России", "искусственный интеллект"],
     "method": "hybrid",
@@ -117,6 +124,19 @@ curl --request POST http://localhost:8000/api/search/ \
 - `top_k` — от 1 до 20 результатов;
 - `batch_size` — от 1 до 20 запросов;
 - `weights` — веса `bm25` и `vector`, сумма должна быть равна `1.0`.
+
+## Защита API
+
+Поисковый endpoint поддерживает следующие переменные окружения:
+
+- `SEARCH_API_KEY` — если задана, каждый запрос должен передавать совпадающий
+  заголовок `X-API-Key`; без переменной аутентификация отключена;
+- `SEARCH_RATE_LIMIT_PER_MINUTE` — лимит на IP-адрес клиента, по умолчанию `60`;
+  значение `0` отключает rate limiting.
+
+При неверном ключе API возвращает `401`. При превышении лимита возвращаются `429`
+и заголовок `Retry-After`. Проверки `/api/health/live` и `/api/health/ready` остаются
+открытыми для Docker и оркестраторов.
 
 ## Поисковые артефакты
 
@@ -174,13 +194,16 @@ git diff --check
 ```
 
 Те же базовые проверки автоматически запускаются GitHub Actions для каждого PR и
-push в `main`. Dependabot еженедельно проверяет Python-зависимости, Docker base image
-и используемые GitHub Actions.
+push в `main`. Отдельный workflow собирает полный Docker-образ, запускает контейнер
+и ожидает успешный readiness-ответ. Dependabot еженедельно проверяет
+Python-зависимости, Docker base image и используемые GitHub Actions.
 
 ## Ограничения
 
 - документы, эмбеддинги и индексы целиком находятся в памяти одного процесса;
 - запуск требует скачанной модели и подготовленных артефактов;
-- API пока не содержит аутентификации, rate limiting и квот;
+- API key отключён, пока явно не задан `SEARCH_API_KEY`;
+- встроенный rate limiter хранится в памяти процесса; для нескольких реплик нужен
+  общий limiter на gateway или Redis;
 - качество нельзя корректно сравнивать без размеченного qrels-набора;
 - гибридный поиск использует линейное смешивание, без reranker или RRF.
