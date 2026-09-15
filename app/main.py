@@ -5,6 +5,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app.api.endpoints import SearchManager, router
@@ -108,6 +109,11 @@ def create_app(search_manager: SearchManager | None = None) -> FastAPI:
     )
 
     application.include_router(router, prefix="/api")
+    application.mount(
+        "/static",
+        StaticFiles(directory=BASE_DIR / "static"),
+        name="static",
+    )
 
     @application.get("/", response_class=HTMLResponse)
     async def get_search_page():
