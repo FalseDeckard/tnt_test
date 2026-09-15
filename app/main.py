@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from app.api.endpoints import SearchManager, router
+from app.api.security import RequestGuard
 
 """
 Главный модуль приложения FastAPI для поисковой системы.
@@ -40,13 +41,16 @@ except FileNotFoundError:
     """
     logger.error("HTML template file not found!")
 
-def create_app(search_manager: SearchManager | None = None) -> FastAPI:
+def create_app(
+    search_manager: SearchManager | None = None,
+    request_guard: RequestGuard | None = None,
+) -> FastAPI:
     """Build an application with an injectable search manager."""
     manager = search_manager or SearchManager()
+    guard = request_guard or RequestGuard.from_environment()
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        application.state.search_manager = manager
         logger.info("Запуск приложения...")
         try:
             await run_in_threadpool(manager.initialize)
@@ -107,6 +111,8 @@ def create_app(search_manager: SearchManager | None = None) -> FastAPI:
         docs_url="/api/docs",
         redoc_url="/api/redoc",
     )
+    application.state.search_manager = manager
+    application.state.request_guard = guard
 
     application.include_router(router, prefix="/api")
     application.mount(
